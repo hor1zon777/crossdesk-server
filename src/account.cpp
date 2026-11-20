@@ -217,7 +217,7 @@ void SignalNegotiation::account_request(websocketpp::connection_hdl hdl,
         [this, hdl, device, username, password, device_name,
          reply]() -> std::function<void()> {
           auto record = DevicePassword::Hash(password);
-          return [this, hdl, device, username, device_name, reply,
+          return [this, hdl, device, username, device_name, reply = json(reply),
                   record = std::move(record)]() mutable {
             if (hdl.expired() || transmission_manager_->GetUserId(hdl) != device) return;
             if (!record) {
@@ -260,7 +260,8 @@ void SignalNegotiation::account_request(websocketpp::connection_hdl hdl,
         const auto result = device_auth_limiter_->Verify(source_key, pair_key, [&] {
           return DevicePassword::Verify(stored, password).has_value() && account.has_value();
         }, DeviceAuthLimiter::Operation::AccountLogin);
-        return [this, hdl, device, device_name, account, result, reply]() mutable {
+        return [this, hdl, device, device_name, account, result,
+                reply = json(reply)]() mutable {
           if (hdl.expired() || transmission_manager_->GetUserId(hdl) != device) return;
           if (!result.authenticated || !account) {
             if (result.retry_after > 0) {
