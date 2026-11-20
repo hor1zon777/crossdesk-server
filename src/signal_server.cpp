@@ -1,6 +1,7 @@
 #include "signal_server.h"
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <csignal>
 #include <cstdint>
@@ -201,6 +202,15 @@ SignalServer::SignalServer(uint16_t port, std::string certs_dir,
       transmission_manager_, device_db_manager_.get(), nullptr,
       CreateIceServerConfigIssuer(), nullptr, source_rate);
   signal_negotiation_->SetSessionRecovery(session_recovery_.get());
+  {
+    // 默认允许客户端自助注册账号；设置为 0/false/off 后只能使用已有账号登录。
+    auto registration = EnvString("CROSSDESK_ACCOUNT_REGISTRATION");
+    for (auto& c : registration) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    const bool enabled = !(registration == "0" || registration == "false" ||
+                           registration == "off" || registration == "no");
+    signal_negotiation_->SetAccountRegistrationEnabled(enabled);
+    LOG_INFO("Account self-registration {}", enabled ? "enabled" : "disabled");
+  }
   signal_negotiation_->SetSendMsgCallback(std::bind(&SignalServer::SendMsg,
                                                     this, std::placeholders::_1,
                                                     std::placeholders::_2));
@@ -1264,6 +1274,11 @@ void SignalServer::ProcessMessage(
       return SubmitCredentialWork(hdl, state, std::move(work),
                                   std::move(admit), std::move(expire));
     };
+    if (SignalNegotiation::IsAccountMessage(type)) {
+      signal_negotiation_->account_request(hdl, j, state->source_address,
+                                           dispatch);
+      return;
+    }
     switch (HASH_STRING_PIECE(type.c_str())) {
       case "login"_H:
         signal_negotiation_->login_user(

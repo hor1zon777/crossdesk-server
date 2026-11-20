@@ -9,7 +9,7 @@
 [![Docker Pulls](https://img.shields.io/docker/pulls/crossdesk/crossdesk-server)](https://hub.docker.com/r/crossdesk/crossdesk-server)
 [![License: LGPL v3](https://img.shields.io/badge/license-LGPL--3.0-blue)](LICENSE)
 
-[部署服务](#运行服务) · [连接客户端](#clients) · [管理后台](#admin) · [状态接口](#stats) · [维护与排查](#operations) · [源码构建](#build)
+[部署服务](#运行服务) · [连接客户端](#clients) · [账号](#accounts) · [管理后台](#admin) · [状态接口](#stats) · [维护与排查](#operations) · [源码构建](#build)
 
 ## 组件与能力
 
@@ -64,9 +64,22 @@ sudo docker compose ps
 
 自动生成的证书只覆盖 `EXTERNAL_IP`。将本次部署的 `${CROSSDESK_DATA_DIR}/certs/api.crossdesk.cn_root.crt` 导入各客户端信任库；使用域名时需提供匹配的证书链和私钥。修改 `.env` 的 IP 不会重新生成已有证书。
 
-桌面端打开 **设置 → 常规 → 自建服务配置**，填写主机和信令端口，确认返回后勾选启用并**保存**；两端必须使用同一服务器，TURN 地址由服务端下发。Web 的 WSS 地址与浏览器证书信任见 [Web 部署指南](https://github.com/kunkundi/crossdesk-web-client/blob/HEAD/docs/DEPLOYMENT.md#configuration)。
+桌面端不再内置公共服务器。打开 **设置 → 常规 → 服务器**，填写主机和信令端口并**保存**；两端必须使用同一服务器，TURN 地址由服务端下发。Web 的 WSS 地址与浏览器证书信任见 [Web 部署指南](https://github.com/kunkundi/crossdesk-web-client/blob/HEAD/docs/DEPLOYMENT.md#configuration)。
 
 [证书文件、各系统信任命令与客户端配置](docs/DEPLOYMENT.md#clients)
+
+<a id="accounts"></a>
+
+## 账号与免密连接
+
+桌面端可在本服务上注册、登录账号。账号绑定到设备身份（设备密钥），客户端不保存账号密码或令牌：
+
+- 同一账号下的设备在“我的设备”中显示在线状态，互相连接时由服务端授权，无需输入设备连接密码；其他设备仍按原流程验证密码。
+- 账号密码使用与设备密码相同的 Argon2id 摘要，登录失败按“设备 + 用户名”累计退避，记录显示在后台风控页（操作类型“账号登录”）。
+- 只有通过设备密钥认证的设备主连接可以登录账号；控制端连接、Web / CLI 临时身份和旧版密码身份会被拒绝。每个账号最多绑定 100 台设备，设备被清理时账号绑定随之删除。
+- 默认允许客户端自助注册。在 `.env` 中设置 `CROSSDESK_ACCOUNT_REGISTRATION=0` 并重新创建容器后，只能登录已有账号。
+
+账号数据保存在同一 SQLite 数据库的 `accounts` / `account_devices` 表中，随数据库一同备份。升级后旧客户端不受影响，但只有新客户端提供账号入口。
 
 <a id="admin"></a>
 

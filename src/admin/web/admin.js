@@ -32,6 +32,7 @@
       "Remote connection": "远程连接",
       "Member query": "成员查询",
       "Initial device key binding": "首次设备密钥绑定",
+      "Account login": "账号登录",
       "Unknown operation": "未知操作",
       "Password verification failed": "密码验证失败",
       "Password verification failed: {operations}": "密码验证失败：{operations}",
@@ -1499,7 +1500,8 @@
     }
     function riskReason(item) {
       const labels = {device_login: 'Device login', remote_connection: 'Remote connection',
-        member_query: 'Member query', device_key_binding: 'Initial device key binding'};
+        member_query: 'Member query', device_key_binding: 'Initial device key binding',
+        account_login: 'Account login'};
       const operations = (item.operations || []).map(operation => t(labels[operation] || 'Unknown operation'));
       const notes = [];
       if (item.failures > 0) notes.push(operations.length

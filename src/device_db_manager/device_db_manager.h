@@ -80,6 +80,24 @@ struct RetentionCleanupResult {
   bool more = false;
 };
 
+// 用户账号。用户名不区分大小写，密码摘要与设备密码使用相同的 Argon2id 格式。
+struct AccountRecord {
+  int64_t id = 0;
+  std::string username;
+  DevicePasswordRecord password;
+};
+
+// 绑定到账号的设备；在线状态与平台来自 device_presence。
+struct AccountDevice {
+  std::string device_id;
+  std::string name;
+  std::string platform;
+  bool online = false;
+  int64_t bound_at = 0;
+};
+
+enum class AccountCreateResult { Created, Exists, Failed };
+
 class DeviceDBManager {
  public:
   enum class OpenMode { ReadWrite, ReadOnly };
@@ -196,8 +214,25 @@ class DeviceDBManager {
                       const std::vector<std::string>& device_ids);
   std::vector<std::string> GetUserDevices(const std::string& user_id);
 
+  // 账号。CreateAccount 成功时返回新账号 ID；用户名已存在时返回 Exists。
+  std::pair<AccountCreateResult, int64_t> CreateAccount(
+      const std::string& username, const DevicePasswordRecord& record);
+  std::optional<AccountRecord> ReadAccount(const std::string& username);
+  std::optional<AccountRecord> ReadAccountById(int64_t account_id);
+  // 仅绑定已注册的持久设备；已绑定其他账号时改绑到新账号。
+  bool BindDeviceToAccount(const std::string& device_id, int64_t account_id,
+                           const std::string& device_name);
+  // account_id 为 0 时解除任意账号绑定，否则只解除指定账号的绑定。
+  bool UnbindDeviceFromAccount(const std::string& device_id,
+                               int64_t account_id = 0);
+  // 未绑定或数据库不可用时返回 nullopt，调用方必须按“无账号”处理。
+  std::optional<int64_t> DeviceAccountId(const std::string& device_id);
+  std::vector<AccountDevice> ListAccountDevices(int64_t account_id);
+  int64_t CountAccounts();
+
  private:
   void InitDB();
+  void InitAccounts();
   std::string GenerateDeviceId();
   bool DeviceIdExists(const std::string& device_id);
   int64_t GetRuntimeLastSeen();

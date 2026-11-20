@@ -667,20 +667,25 @@ bool SignalNegotiation::query_user_id_list(websocketpp::connection_hdl hdl,
     send_msg_(hdl, failure);
     return true;
   }
+  auto authorized = [this, hdl, transmission_id] {
+    std::vector<std::string> user_id_list =
+        transmission_manager_->GetAllUserIdOfTransmission(transmission_id);
+
+    json message = {{"type", "user_id_list"},
+                    {"transmission_id", transmission_id},
+                    {"user_id_list", user_id_list},
+                    {"status", "success"}};
+
+    send_msg_(hdl, message);
+  };
+  // 同一账号下的设备无需密码。
+  if (SameAccount(hdl, transmission_id)) {
+    authorized();
+    return true;
+  }
   AuthenticateDevice(
       hdl, source_address, transmission_id, password, failure,
-      DeviceAuthLimiter::Operation::MemberQuery, dispatch,
-      [this, hdl, transmission_id] {
-        std::vector<std::string> user_id_list =
-            transmission_manager_->GetAllUserIdOfTransmission(transmission_id);
-
-        json message = {{"type", "user_id_list"},
-                        {"transmission_id", transmission_id},
-                        {"user_id_list", user_id_list},
-                        {"status", "success"}};
-
-        send_msg_(hdl, message);
-      });
+      DeviceAuthLimiter::Operation::MemberQuery, dispatch, authorized);
 
   return true;
 }
@@ -721,6 +726,49 @@ bool SignalNegotiation::join_transmission(websocketpp::connection_hdl hdl,
     send_msg_(hdl, failure);
     return true;
   }
+  auto authorized = [this, hdl, transmission_id, user_id] {
+    std::string host_id =
+        transmission_manager_->GetHostIdOfTransmission(transmission_id);
+    websocketpp::connection_hdl host_hdl =
+        transmission_manager_->GetWsHandle(host_id);
+
+    if (host_id.empty() || host_hdl.expired()) {
+      LOG_WARN("Remote [{}] is unavailable, cannot join transmission",
+               transmission_id.c_str());
+      json message = {{"type", "user_join_transmission"},
+                      {"transmission_id", transmission_id},
+                      {"status", "failed"}};
+      SetFailure(message, "REMOTE_UNAVAILABLE", "Remote unavailable");
+      send_msg_(hdl, message);
+      return;
+    }
+
+    if (!transmission_manager_->BindGuestToTransmission(
+            user_id, transmission_id, hdl)) {
+      LOG_WARN("Reject connection request without a valid guest binding");
+      return;
+    }
+
+    // Also confirm an existing legacy routing entry restored at startup;
+    // binding that entry does not emit a new session callback.
+    device_db_manager_->StartRemoteControlSession(transmission_id, host_id,
+                                                  user_id);
+
+    json message = {{"type", "user_join_transmission"},
+                    {"transmission_id", transmission_id},
+                    {"user_id", user_id},
+                    {"status", "success"}};
+
+    if (recovery_) recovery_->Issue(transmission_id, host_id, user_id, hdl);
+    AddConnectionIceConfig(message, host_id);
+    send_msg_(host_hdl, message);
+  };
+  // 控制端与被控端登录同一账号时免密连接，不消耗密码失败配额。
+  if (SameAccount(hdl, transmission_id)) {
+    LOG_INFO("Authorize [{}] to join [{}] by account", user_id, transmission_id);
+    authorized();
+    return true;
+  }
   if (password.empty() && ValidDeviceCredentials(transmission_id, password)) {
     // Older desktops probe with ID@ to open their password dialog. This is
     // not a password guess: never read the target record, spend a credential
@@ -731,44 +779,7 @@ bool SignalNegotiation::join_transmission(websocketpp::connection_hdl hdl,
   }
   AuthenticateDevice(
       hdl, source_address, transmission_id, password, failure,
-      DeviceAuthLimiter::Operation::RemoteConnection, dispatch,
-      [this, hdl, transmission_id, user_id] {
-        std::string host_id =
-            transmission_manager_->GetHostIdOfTransmission(transmission_id);
-        websocketpp::connection_hdl host_hdl =
-            transmission_manager_->GetWsHandle(host_id);
-
-        if (host_id.empty() || host_hdl.expired()) {
-          LOG_WARN("Remote [{}] is unavailable, cannot join transmission",
-                   transmission_id.c_str());
-          json message = {{"type", "user_join_transmission"},
-                          {"transmission_id", transmission_id},
-                          {"status", "failed"}};
-          SetFailure(message, "REMOTE_UNAVAILABLE", "Remote unavailable");
-          send_msg_(hdl, message);
-          return;
-        }
-
-        if (!transmission_manager_->BindGuestToTransmission(
-                user_id, transmission_id, hdl)) {
-          LOG_WARN("Reject connection request without a valid guest binding");
-          return;
-        }
-
-        // Also confirm an existing legacy routing entry restored at startup;
-        // binding that entry does not emit a new session callback.
-        device_db_manager_->StartRemoteControlSession(transmission_id, host_id,
-                                                      user_id);
-
-        json message = {{"type", "user_join_transmission"},
-                        {"transmission_id", transmission_id},
-                        {"user_id", user_id},
-                        {"status", "success"}};
-
-        if (recovery_) recovery_->Issue(transmission_id, host_id, user_id, hdl);
-        AddConnectionIceConfig(message, host_id);
-        send_msg_(host_hdl, message);
-      });
+      DeviceAuthLimiter::Operation::RemoteConnection, dispatch, authorized);
 
   return true;
 }

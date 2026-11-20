@@ -40,6 +40,7 @@ class DeviceAuthLimiter {
     RemoteConnection = 2,
     MemberQuery = 4,
     DeviceKeyBinding = 8,
+    AccountLogin = 16,
   };
 
   struct Result {

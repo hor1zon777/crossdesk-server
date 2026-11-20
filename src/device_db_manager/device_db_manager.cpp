@@ -507,6 +507,7 @@ void DeviceDBManager::InitDB() {
   EnsureTextColumn(db_, "remote_control_sessions", "normalized_host_id");
   EnsureIntegerColumn(db_, "remote_control_sessions", "activity_confirmed");
   InitDailyControllerActivity();
+  InitAccounts();
   ExecuteSchemaStatement(
       db_,
       "UPDATE remote_control_sessions SET "

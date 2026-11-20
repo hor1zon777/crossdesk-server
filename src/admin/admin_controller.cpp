@@ -444,7 +444,8 @@ AdminHttpResponse AdminController::HandleRiskControl(const AdminHttpRequest& req
           std::pair{DeviceAuthLimiter::Operation::DeviceLogin, "device_login"},
           std::pair{DeviceAuthLimiter::Operation::RemoteConnection, "remote_connection"},
           std::pair{DeviceAuthLimiter::Operation::MemberQuery, "member_query"},
-          std::pair{DeviceAuthLimiter::Operation::DeviceKeyBinding, "device_key_binding"}}) {
+          std::pair{DeviceAuthLimiter::Operation::DeviceKeyBinding, "device_key_binding"},
+          std::pair{DeviceAuthLimiter::Operation::AccountLogin, "account_login"}}) {
         if (state.operations & static_cast<uint8_t>(operation))
           item["operations"].push_back(name);
       }

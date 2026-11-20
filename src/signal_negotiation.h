@@ -73,6 +73,16 @@ class SignalNegotiation {
   void OnTemporaryControllerDisconnect(const std::string& user_id);
   void ForgetPasswordChangeResults(const std::string& device_id);
   void SetSessionRecovery(SessionRecovery* recovery) { recovery_ = recovery; }
+
+  // 账号消息（account_*）。只接受设备密钥验证过的设备主连接，控制端连接
+  // （C-）、Web/CLI 临时身份和旧版密码登录连接都会被拒绝。
+  static bool IsAccountMessage(const std::string& type);
+  void account_request(websocketpp::connection_hdl hdl, const json& j,
+                       const std::string& source_address = "",
+                       const CredentialDispatch& dispatch = {});
+  void SetAccountRegistrationEnabled(bool enabled) {
+    account_registration_enabled_ = enabled;
+  }
   std::shared_ptr<DeviceAuthLimiter> AuthLimiter() const { return device_auth_limiter_; }
 
  private:
@@ -110,6 +120,13 @@ class SignalNegotiation {
   bool LoginWithKey(websocketpp::connection_hdl hdl, const json& request,
                     const std::string& source, const CredentialDispatch& dispatch,
                     std::function<void()> on_login);
+  // 控制端连接（设备密钥已验证）与目标设备绑定同一账号时返回 true。
+  bool SameAccount(websocketpp::connection_hdl hdl,
+                   const std::string& target_device) const;
+  void BindAccount(websocketpp::connection_hdl hdl, const std::string& device_id,
+                   const AccountRecord& account, const std::string& device_name,
+                   json reply);
+  void NotifyAccountChanged(int64_t account_id, const std::string& except = "");
   void RunCredentialWork(websocketpp::connection_hdl hdl,
                          const std::string& source_address, json failure,
                          CredentialWork work,
@@ -136,6 +153,7 @@ class SignalNegotiation {
       password_change_results_;
   std::deque<std::string> password_change_result_order_;
   SessionRecovery* recovery_ = nullptr;
+  bool account_registration_enabled_ = true;
 };
 
 #endif
